@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Việt Xô CSKH</title>
+<link rel="icon" href="/favicon-vietxo.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <img class="logo" src="/viet-xo-logo-transparent.png" alt="Nha khoa Quốc tế Việt Xô">
+    <nav id="nav">
+      <button data-view="dashboard">Tổng quan</button>
+      <button data-view="appointments">Lịch hẹn</button>
+      <button data-view="care">Chăm sóc &amp; tư vấn</button>
+      <button data-view="customers">Khách hàng</button>
+      <button data-view="users" id="navUsers" hidden>Tài khoản</button>
+    </nav>
+    <div class="me" id="me" hidden>
+      <b id="meName"></b><span class="muted" id="meRole"></span>
+      <button class="btn sm" id="pwBtn">Đổi mật khẩu</button>
+      <button class="btn sm" id="logoutBtn">Đăng xuất</button>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="top">
+      <button class="icon-btn menu" id="menuBtn" aria-label="Mở menu">☰</button>
+      <div>
+        <h1 id="title"></h1>
+        <p id="subtitle"></p>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="newCustomer">+ Khách hàng</button>
+        <button class="btn primary" id="newRecord">+ Lịch hẹn / chăm sóc</button>
+      </div>
+    </header>
+    <section id="view"></section>
+  </main>
+</div>
+<div id="login" class="login" hidden>
+  <form class="login-card" id="loginForm">
+    <img src="/viet-xo-logo-transparent.png" alt="Nha khoa Quốc tế Việt Xô">
+    <h2>Đăng nhập CSKH</h2>
+    <div class="field"><label for="lu">Tên đăng nhập</label><input id="lu" name="username" autocomplete="username" required autofocus></div>
+    <div class="field"><label for="lp">Mật khẩu</label><input id="lp" name="password" type="password" autocomplete="current-password" required></div>
+    <div class="demo-hint" id="demoHint" hidden>
+      <b>Bản xem thử</b> — bấm để điền sẵn (mật khẩu chung <code>demo1234</code>):
+      <div><button type="button" class="btn sm" data-demo="admin">Quản trị</button>
+      <button type="button" class="btn sm" data-demo="cskh">Chăm sóc KH</button>
+      <button type="button" class="btn sm" data-demo="bacsi">Bác sĩ</button></div>
+    </div>
+    <p class="login-err" id="loginErr" role="alert"></p>
+    <button class="btn primary">Đăng nhập</button>
+  </form>
+</div>
+<div id="modal" class="modal" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

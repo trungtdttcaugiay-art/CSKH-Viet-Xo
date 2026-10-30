@@ -1,0 +1,11 @@
+{
+  "name": "vietxo-cskh",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phần mềm chăm sóc khách hàng — Nha khoa Quốc tế Việt Xô",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" }
+}
