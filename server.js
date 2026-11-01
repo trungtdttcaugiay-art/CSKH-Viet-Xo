@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import { buildXlsx } from "./xlsx.js";
+import { syncConfig, syncFromVietXo } from "./vietxo-sync.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, "public");
@@ -46,9 +48,9 @@ function seed() {
     return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(hh)}:${z(mm)}`;
   };
   const records = [
-    { id: "CS-0001", customerId: "KH-00001", appointmentAt: day(0, 15, 0), doctorId: "BS-001", serviceId: "DV-005", status: "confirmed", careContent: "Gọi nhắc lịch hẹn hàn ống tủy, nhắc ăn nhẹ trước khi đến.", consultContent: "Tư vấn bọc sứ R26 sau khi hoàn tất điều trị tủy.", note: "Khách muốn lịch sau 15h." },
+    { id: "CS-0001", customerId: "KH-00001", appointmentAt: day(0, 15, 0), consultAt: day(0, 16, 0), doctorId: "BS-001", serviceId: "DV-005", status: "confirmed", careContent: "Gọi nhắc lịch hẹn hàn ống tủy, nhắc ăn nhẹ trước khi đến.", consultContent: "Tư vấn bọc sứ R26 sau khi hoàn tất điều trị tủy.", note: "Khách muốn lịch sau 15h." },
     { id: "CS-0002", customerId: "KH-00002", appointmentAt: day(1, 10, 0), doctorId: "BS-003", serviceId: "DV-008", status: "scheduled", careContent: "Gửi Zalo xác nhận lịch tư vấn niềng răng.", consultContent: "Khách quan tâm niềng răng mắc cài, hỏi chi phí và thời gian điều trị.", note: "" },
-    { id: "CS-0003", customerId: "KH-00003", appointmentAt: day(3, 9, 0), doctorId: "BS-002", serviceId: "DV-010", status: "scheduled", careContent: "Nhắc lịch lắp răng tạm và hướng dẫn vệ sinh sau cấy ghép.", consultContent: "Tư vấn kế hoạch thanh toán phần công nợ còn lại.", note: "" },
+    { id: "CS-0003", customerId: "KH-00003", appointmentAt: day(3, 9, 0), consultAt: day(2, 15, 0), interpreter: "Nguyễn Thị Lan (tiếng Nga)", doctorId: "BS-002", serviceId: "DV-010", status: "scheduled", careContent: "Nhắc lịch lắp răng tạm và hướng dẫn vệ sinh sau cấy ghép.", consultContent: "Tư vấn kế hoạch thanh toán phần công nợ còn lại.", note: "" },
     { id: "CS-0004", customerId: "KH-00004", appointmentAt: day(-2, 14, 0), doctorId: "BS-003", serviceId: "DV-009", status: "completed", careContent: "Hỏi thăm tình trạng ê buốt sau siết dây cung, khách ổn.", consultContent: "Hướng dẫn dùng chỉ nha khoa và bàn chải kẽ.", note: "Hẹn tái khám 4 tuần." },
     { id: "CS-0005", customerId: "KH-00005", appointmentAt: day(-5, 9, 30), doctorId: "BS-005", serviceId: "DV-004", status: "no_show", careContent: "Gọi 2 lần không bắt máy, đã nhắn Zalo.", consultContent: "", note: "Gọi lại buổi tối để đặt lịch mới." },
   ].map((r) => ({ ...r, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
@@ -170,9 +172,12 @@ function cleanRecord(b) {
   if (!db.customers.some((c) => c.id === b.customerId)) throw httpError(400, "Khách hàng không tồn tại.");
   const appointmentAt = str(b.appointmentAt, 20);
   if (appointmentAt && Number.isNaN(Date.parse(appointmentAt))) throw httpError(400, "Lịch hẹn không hợp lệ.");
+  const consultAt = str(b.consultAt, 20);
+  if (consultAt && Number.isNaN(Date.parse(consultAt))) throw httpError(400, "Lịch hẹn tư vấn không hợp lệ.");
   return {
     customerId: b.customerId,
     appointmentAt,
+    consultAt,
     doctorId: db.doctors.some((d) => d.id === b.doctorId) ? b.doctorId : "",
     serviceId: db.services.some((s) => s.id === b.serviceId) ? b.serviceId : "",
     status: APPT_STATUS.includes(b.status) ? b.status : "scheduled",
@@ -198,7 +203,49 @@ async function readBody(req) {
   catch { throw httpError(400, "JSON không hợp lệ."); }
 }
 
-const nextId = (kind, prefix, pad) => `${prefix}-${String(++db.seq[kind]).padStart(pad, "0")}`;
+// Bỏ qua mã đã tồn tại (khách đồng bộ từ website VietXO có thể đã dùng sẵn mã BN-xxxxx).
+function nextId(kind, prefix, pad, list) {
+  let id;
+  do id = `${prefix}-${String(++db.seq[kind]).padStart(pad, "0")}`; while (list.some((x) => x.id === id));
+  return id;
+}
+
+/* ---------- Xuất Excel ---------- */
+const STATUS_LABEL = { scheduled: "Đã đặt lịch", confirmed: "Đã xác nhận", completed: "Hoàn tất", cancelled: "Đã hủy", no_show: "Không đến" };
+const dmy = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}${s.length > 10 ? " " + s.slice(11, 16) : ""}` : "");
+function exportWorkbook(type, ids) {
+  const set = new Set(Array.isArray(ids) ? ids.slice(0, 50000).map(String) : []);
+  const doc = (id) => db.doctors.find((d) => d.id === id)?.name || "";
+  if (type === "customers") {
+    const rows = db.customers.filter((c) => set.has(c.id)).map((c) => [c.id, c.name, c.phone, c.gender, c.birthYear || "", c.email, c.address, c.source, doc(c.doctorId), c.status, c.note]);
+    return buildXlsx("Bệnh nhân", ["Mã BN", "Họ tên", "Điện thoại", "Giới tính", "Năm sinh", "Email", "Địa chỉ", "Nguồn", "Bác sĩ phụ trách", "Trạng thái", "Ghi chú"], rows, [12, 26, 16, 10, 10, 24, 30, 16, 24, 16, 40]);
+  }
+  const rows = db.records.filter((r) => set.has(r.id)).map((r) => {
+    const c = db.customers.find((x) => x.id === r.customerId);
+    return [r.customerId, c?.name || "", c?.phone || "", dmy(r.appointmentAt), dmy(r.consultAt), doc(r.doctorId), db.services.find((s) => s.id === r.serviceId)?.name || "",
+      STATUS_LABEL[r.status] || r.status, r.interpreter || "", r.careContent, r.consultContent, r.note];
+  });
+  return buildXlsx("Lịch hẹn & chăm sóc", ["Mã BN", "Họ tên", "Điện thoại", "Lịch hẹn", "Lịch hẹn tư vấn", "Bác sĩ", "Dịch vụ", "Trạng thái", "Phiên dịch viên", "Nội dung chăm sóc", "Nội dung tư vấn", "Ghi chú"], rows, [12, 26, 16, 18, 18, 24, 26, 14, 22, 44, 44, 36]);
+}
+
+/* ---------- Đồng bộ website VietXO ---------- */
+let syncing = false;
+async function runSync() {
+  const cfg = syncConfig();
+  if (!cfg.configured) throw httpError(400, "Chưa cấu hình VIETXO_URL, VIETXO_EMAIL, VIETXO_PASSWORD.");
+  if (syncing) throw httpError(409, "Đang đồng bộ, vui lòng đợi.");
+  syncing = true;
+  try {
+    const sum = await syncFromVietXo(db, cfg, () => nextId("record", "CS", 4, db.records));
+    db.lastSync = { ok: true, ...sum };
+    saveDb(db); return db.lastSync;
+  } catch (e) {
+    db.lastSync = { ok: false, at: new Date().toISOString(), error: String(e.message || e).slice(0, 300) };
+    saveDb(db); throw httpError(502, db.lastSync.error);
+  } finally { syncing = false; }
+}
+const syncMinutes = Number(process.env.SYNC_INTERVAL_MIN || 0);
+if (syncMinutes > 0 && syncConfig().configured) setInterval(() => runSync().catch((e) => console.error("Đồng bộ tự động lỗi:", e.message)), syncMinutes * 60_000);
 
 async function api(req, res, url) {
   const parts = url.pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
@@ -274,13 +321,25 @@ async function api(req, res, url) {
     }
   }
 
+  if (res1 === "export" && m === "POST") {
+    const b = await readBody(req);
+    const file = exportWorkbook(b.type === "customers" ? "customers" : "records", b.ids);
+    res.writeHead(200, { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Length": file.length, "Cache-Control": "no-store" });
+    return res.end(file);
+  }
+  if (res1 === "sync") {
+    if (me.role !== "admin") throw httpError(403, "Chỉ quản trị viên được đồng bộ.");
+    if (m === "GET") { const c = syncConfig(); return send({ configured: c.configured, url: c.url, last: db.lastSync || null }); }
+    if (m === "POST") return send(await runSync());
+  }
+
   if (res1 === "bootstrap" && m === "GET") {
     return send({ doctors: db.doctors, services: db.services, sources: db.sources, customers: db.customers, records: db.records });
   }
   if (res1 === "customers") {
     if (!canEdit) throw httpError(403, "Bạn không có quyền thay đổi hồ sơ khách hàng.");
     if (m === "POST") {
-      const c = { id: nextId("customer", "BN", 5), ...cleanCustomer(await readBody(req)) };
+      const c = { id: nextId("customer", "BN", 5, db.customers), ...cleanCustomer(await readBody(req)) };
       db.customers.unshift(c); saveDb(db); return send(c, 201);
     }
     const idx = db.customers.findIndex((c) => c.id === id);
@@ -298,7 +357,7 @@ async function api(req, res, url) {
   if (res1 === "records") {
     if (m === "POST") {
       const now = new Date().toISOString();
-      const r = { id: nextId("record", "CS", 4), ...cleanRecord(await readBody(req)), createdAt: now, updatedAt: now };
+      const r = { id: nextId("record", "CS", 4, db.records), ...cleanRecord(await readBody(req)), createdAt: now, updatedAt: now };
       db.records.unshift(r); saveDb(db); return send(r, 201);
     }
     const idx = db.records.findIndex((r) => r.id === id);

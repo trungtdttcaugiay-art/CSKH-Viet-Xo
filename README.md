@@ -23,8 +23,34 @@ Dữ liệu lưu trong `data/db.json` (tự tạo kèm dữ liệu mẫu ở l�
 
 ## Trường dữ liệu mỗi lần chăm sóc
 
-Khách hàng · **Lịch hẹn** (ngày giờ) · Bác sĩ · Dịch vụ · Trạng thái lịch hẹn ·
-**Nội dung chăm sóc** · **Nội dung tư vấn** · **Ghi chú**.
+Mã BN · **Lịch hẹn** (khám/điều trị) · **Lịch hẹn tư vấn** · Bác sĩ · Dịch vụ · Trạng thái lịch hẹn ·
+**Phiên dịch viên** · **Nội dung chăm sóc** · **Nội dung tư vấn** · **Ghi chú**.
+
+## Bộ lọc & xuất Excel
+
+- Lọc theo **mã BN**, **số điện thoại**, **khoảng ngày** (từ – đến) ở màn Lịch hẹn và Chăm sóc & tư vấn;
+  mã BN + SĐT ở màn Khách hàng. "Loại lịch" chọn tính lịch khám, lịch tư vấn hoặc cả hai.
+- Nút **Xuất Excel** xuất đúng danh sách đang hiển thị (đã áp bộ lọc) ra file `.xlsx`
+  (dòng tiêu đề cố định, có bộ lọc sẵn). Mọi vai trò đều xuất được.
+
+## Đồng bộ với website VietXO (source cũ)
+
+Một chiều **website → CSKH**, chỉ đọc, dùng API của website: `POST /api/auth/login` rồi `GET /api/workspace`.
+Đồng bộ bệnh nhân (giữ nguyên mã `BN-xxxxx`), lịch hẹn, bác sĩ, dịch vụ. Nội dung chăm sóc, tư vấn, phiên dịch,
+lịch tư vấn và ghi chú do CSKH nhập **không bao giờ bị ghi đè**. Chạy lại nhiều lần không tạo bản ghi trùng.
+
+Cấu hình bằng biến môi trường (không lưu vào file dữ liệu), dùng tài khoản admin/lễ tân của website:
+
+```bash
+VIETXO_URL=https://<tên-miền-website> VIETXO_EMAIL=<email> VIETXO_PASSWORD=<mật-khẩu> node server.js
+```
+
+Admin vào mục **Tài khoản & đồng bộ** bấm **Đồng bộ ngay**; hoặc đặt `SYNC_INTERVAL_MIN=15` để tự đồng bộ.
+`VIETXO_URL` bắt buộc `https` (trừ localhost). Lưu ý: `/api/workspace` của website trả tối đa 250 bệnh nhân gần nhất.
+Trùng mã BN với khách nhập tay khác người sẽ bị bỏ qua và báo số lượng xung đột.
+
+Chưa kiểm thử với website thật (cần tài khoản của bạn); đã kiểm thử bằng server giả lập đúng API đó:
+`node tools/mock-vietxo.mjs` (cổng 3200). Bản demo (`node --env-file=.demo.env server.js`) trỏ sẵn tới server giả lập.
 
 Đã bỏ hoàn toàn trường **phụ tá** (không còn ở khách hàng, lịch hẹn hay bác sĩ).
 

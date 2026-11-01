@@ -74,6 +74,11 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--soft); }
 .profile { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .profile div { min-width: 140px; } .profile small { display: block; color: var(--text-3); }
 [hidden] { display: none !important; }
+.dl { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
+.dl input { width: auto; }
+.toolbar input[type=date] { max-width: 160px; }
+select:disabled { opacity: .5; }
+code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
 .me { position: absolute; left: 14px; right: 14px; bottom: 16px; display: grid; gap: 6px; font-size: 13px; }
 .login { position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; z-index: 40; padding: 16px; }
 .login-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; width: 100%; max-width: 380px; display: grid; gap: 14px; }
