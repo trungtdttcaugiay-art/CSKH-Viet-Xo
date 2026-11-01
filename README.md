@@ -23,13 +23,13 @@ Dữ liệu lưu trong `data/db.json` (tự tạo kèm dữ liệu mẫu ở l�
 
 ## Trường dữ liệu mỗi lần chăm sóc
 
-Mã BN · **Lịch hẹn** (khám/điều trị) · **Lịch hẹn tư vấn** · Bác sĩ · Dịch vụ · Trạng thái lịch hẹn ·
+Mã BN · **Lịch hẹn** (khám/điều trị, ngày giờ) · **Lịch hẹn tư vấn** (ghi chú tự do, không theo ngày giờ) · Bác sĩ · Dịch vụ · Trạng thái lịch hẹn ·
 **Phiên dịch viên** · **Nội dung chăm sóc** · **Nội dung tư vấn** · **Ghi chú**.
 
 ## Bộ lọc & xuất Excel
 
 - Lọc theo **mã BN**, **số điện thoại**, **khoảng ngày** (từ – đến) ở màn Lịch hẹn và Chăm sóc & tư vấn;
-  mã BN + SĐT ở màn Khách hàng. "Loại lịch" chọn tính lịch khám, lịch tư vấn hoặc cả hai.
+  mã BN + SĐT ở màn Khách hàng. Bộ lọc ngày áp dụng cho lịch hẹn khám.
 - Nút **Xuất Excel** xuất đúng danh sách đang hiển thị (đã áp bộ lọc) ra file `.xlsx`
   (dòng tiêu đề cố định, có bộ lọc sẵn). Mọi vai trò đều xuất được.
 

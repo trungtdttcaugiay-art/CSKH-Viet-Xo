@@ -48,9 +48,9 @@ function seed() {
     return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(hh)}:${z(mm)}`;
   };
   const records = [
-    { id: "CS-0001", customerId: "KH-00001", appointmentAt: day(0, 15, 0), consultAt: day(0, 16, 0), doctorId: "BS-001", serviceId: "DV-005", status: "confirmed", careContent: "Gọi nhắc lịch hẹn hàn ống tủy, nhắc ăn nhẹ trước khi đến.", consultContent: "Tư vấn bọc sứ R26 sau khi hoàn tất điều trị tủy.", note: "Khách muốn lịch sau 15h." },
+    { id: "CS-0001", customerId: "KH-00001", appointmentAt: day(0, 15, 0), consultNote: "Tư vấn bọc sứ R26 sau khi điều trị tủy xong, khách hẹn 16h cùng ngày.", doctorId: "BS-001", serviceId: "DV-005", status: "confirmed", careContent: "Gọi nhắc lịch hẹn hàn ống tủy, nhắc ăn nhẹ trước khi đến.", consultContent: "Tư vấn bọc sứ R26 sau khi hoàn tất điều trị tủy.", note: "Khách muốn lịch sau 15h." },
     { id: "CS-0002", customerId: "KH-00002", appointmentAt: day(1, 10, 0), doctorId: "BS-003", serviceId: "DV-008", status: "scheduled", careContent: "Gửi Zalo xác nhận lịch tư vấn niềng răng.", consultContent: "Khách quan tâm niềng răng mắc cài, hỏi chi phí và thời gian điều trị.", note: "" },
-    { id: "CS-0003", customerId: "KH-00003", appointmentAt: day(3, 9, 0), consultAt: day(2, 15, 0), interpreter: "Nguyễn Thị Lan (tiếng Nga)", doctorId: "BS-002", serviceId: "DV-010", status: "scheduled", careContent: "Nhắc lịch lắp răng tạm và hướng dẫn vệ sinh sau cấy ghép.", consultContent: "Tư vấn kế hoạch thanh toán phần công nợ còn lại.", note: "" },
+    { id: "CS-0003", customerId: "KH-00003", appointmentAt: day(3, 9, 0), consultNote: "Hẹn tư vấn kế hoạch thanh toán chiều thứ Tư, cần phiên dịch tiếng Nga.", interpreter: "Nguyễn Thị Lan (tiếng Nga)", doctorId: "BS-002", serviceId: "DV-010", status: "scheduled", careContent: "Nhắc lịch lắp răng tạm và hướng dẫn vệ sinh sau cấy ghép.", consultContent: "Tư vấn kế hoạch thanh toán phần công nợ còn lại.", note: "" },
     { id: "CS-0004", customerId: "KH-00004", appointmentAt: day(-2, 14, 0), doctorId: "BS-003", serviceId: "DV-009", status: "completed", careContent: "Hỏi thăm tình trạng ê buốt sau siết dây cung, khách ổn.", consultContent: "Hướng dẫn dùng chỉ nha khoa và bàn chải kẽ.", note: "Hẹn tái khám 4 tuần." },
     { id: "CS-0005", customerId: "KH-00005", appointmentAt: day(-5, 9, 30), doctorId: "BS-005", serviceId: "DV-004", status: "no_show", careContent: "Gọi 2 lần không bắt máy, đã nhắn Zalo.", consultContent: "", note: "Gọi lại buổi tối để đặt lịch mới." },
   ].map((r) => ({ ...r, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
@@ -80,6 +80,16 @@ if (db.customers.some((c) => c.id.startsWith("KH-"))) {
   const bn = (id) => id.replace(/^KH-/, "BN-");
   db.customers.forEach((c) => { c.id = bn(c.id); });
   db.records.forEach((r) => { r.customerId = bn(r.customerId); });
+  saveDb(db);
+}
+// "Lịch hẹn tư vấn" chuyển từ ngày giờ sang ghi chú tự do: giữ lại giá trị cũ dưới dạng chữ (dd/mm/yyyy hh:mm).
+if (db.records.some((r) => "consultAt" in r)) {
+  for (const r of db.records) {
+    if (!("consultAt" in r)) continue;
+    const s = r.consultAt || "";
+    if (!r.consultNote) r.consultNote = s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}` : "";
+    delete r.consultAt;
+  }
   saveDb(db);
 }
 const str = (v, max = 2000) => String(v ?? "").trim().slice(0, max);
@@ -172,12 +182,10 @@ function cleanRecord(b) {
   if (!db.customers.some((c) => c.id === b.customerId)) throw httpError(400, "Khách hàng không tồn tại.");
   const appointmentAt = str(b.appointmentAt, 20);
   if (appointmentAt && Number.isNaN(Date.parse(appointmentAt))) throw httpError(400, "Lịch hẹn không hợp lệ.");
-  const consultAt = str(b.consultAt, 20);
-  if (consultAt && Number.isNaN(Date.parse(consultAt))) throw httpError(400, "Lịch hẹn tư vấn không hợp lệ.");
   return {
     customerId: b.customerId,
     appointmentAt,
-    consultAt,
+    consultNote: str(b.consultNote),
     doctorId: db.doctors.some((d) => d.id === b.doctorId) ? b.doctorId : "",
     serviceId: db.services.some((s) => s.id === b.serviceId) ? b.serviceId : "",
     status: APPT_STATUS.includes(b.status) ? b.status : "scheduled",
@@ -222,7 +230,7 @@ function exportWorkbook(type, ids) {
   }
   const rows = db.records.filter((r) => set.has(r.id)).map((r) => {
     const c = db.customers.find((x) => x.id === r.customerId);
-    return [r.customerId, c?.name || "", c?.phone || "", dmy(r.appointmentAt), dmy(r.consultAt), doc(r.doctorId), db.services.find((s) => s.id === r.serviceId)?.name || "",
+    return [r.customerId, c?.name || "", c?.phone || "", dmy(r.appointmentAt), r.consultNote || "", doc(r.doctorId), db.services.find((s) => s.id === r.serviceId)?.name || "",
       STATUS_LABEL[r.status] || r.status, r.interpreter || "", r.careContent, r.consultContent, r.note];
   });
   return buildXlsx("Lịch hẹn & chăm sóc", ["Mã BN", "Họ tên", "Điện thoại", "Lịch hẹn", "Lịch hẹn tư vấn", "Bác sĩ", "Dịch vụ", "Trạng thái", "Phiên dịch viên", "Nội dung chăm sóc", "Nội dung tư vấn", "Ghi chú"], rows, [12, 26, 16, 18, 18, 24, 26, 14, 22, 44, 44, 36]);

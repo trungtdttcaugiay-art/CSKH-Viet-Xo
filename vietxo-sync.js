@@ -110,7 +110,7 @@ export async function syncFromVietXo(db, cfg, newRecordId) {
     const rec = db.records.find((x) => x.extId === a.id);
     if (!rec) {
       const now = new Date().toISOString();
-      db.records.unshift({ id: newRecordId(), extId: a.id, customerId, consultAt: "", interpreter: "", careContent: "", consultContent: "", note: clip(a.note, 2000), ...fields, createdAt: now, updatedAt: now });
+      db.records.unshift({ id: newRecordId(), extId: a.id, customerId, consultNote: "", interpreter: "", careContent: "", consultContent: "", note: clip(a.note, 2000), ...fields, createdAt: now, updatedAt: now });
       sum.records.created++;
     } else if (Object.entries(fields).some(([k, v]) => rec[k] !== v)) {
       Object.assign(rec, fields, { updatedAt: new Date().toISOString() }); sum.records.updated++;

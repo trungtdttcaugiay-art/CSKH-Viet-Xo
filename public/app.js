@@ -19,7 +19,7 @@ let data = { doctors: [], services: [], sources: [], customers: [], records: [] 
 let view = "dashboard";
 let returnTo = null; // mở lại hồ sơ khách sau khi lưu bản ghi từ trong hồ sơ
 // bn / phone / from / to dùng chung cho Lịch hẹn, Chăm sóc & tư vấn (và bn / phone cho Khách hàng).
-const filters = { apptRange: "upcoming", apptType: "all", apptDoctor: "", apptStatus: "", careQ: "", custQ: "", custStatus: "", bn: "", phone: "", from: "", to: "" };
+const filters = { apptRange: "upcoming", apptDoctor: "", apptStatus: "", careQ: "", custQ: "", custStatus: "", bn: "", phone: "", from: "", to: "" };
 let shown = { type: "records", ids: [] }; // danh sách đang hiển thị — dùng cho nút Xuất Excel
 let syncInfo = null;
 
@@ -102,7 +102,7 @@ function recordRows(list, { withCustomer = true } = {}) {
       return `<tr>
         ${withCustomer ? `<td>${esc(r.customerId)}</td><td><a href="#" data-cust="${esc(r.customerId)}"><b>${esc(c?.name || "—")}</b></a><div class="muted">${esc(c?.phone || "")}</div></td>` : ""}
         <td>${esc(fmtDT(r.appointmentAt))}</td>
-        <td>${r.consultAt ? esc(fmtDT(r.consultAt)) : '<span class="muted">—</span>'}</td>
+        <td class="clip">${nl(r.consultNote)}</td>
         <td>${esc(doctor(r.doctorId)?.name || "—")}<div class="muted">${esc(service(r.serviceId)?.name || "")}</div></td>
         <td>${nl(r.interpreter)}</td>
         <td>${badge(r.status)}</td>
@@ -118,9 +118,8 @@ function dashboardView() {
   const todayList = data.records.filter((r) => r.appointmentAt.startsWith(t) && r.status !== "cancelled").sort(byAppt);
   const week = active.filter((r) => r.appointmentAt.slice(0, 10) > t && r.appointmentAt.slice(0, 10) <= addDays(7));
   const unconfirmed = active.filter((r) => r.status === "scheduled" && r.appointmentAt.slice(0, 10) <= addDays(2) && r.appointmentAt.slice(0, 10) >= t);
-  const consults = data.records.filter((r) => r.consultAt && r.consultAt.slice(0, 10) >= t && r.consultAt.slice(0, 10) <= addDays(7) && r.status !== "cancelled")
-    .sort((a, b) => a.consultAt.localeCompare(b.consultAt));
-  const consultToday = consults.filter((r) => r.consultAt.startsWith(t)).length;
+  const consults = data.records.filter((r) => r.consultNote && r.status !== "cancelled" && r.status !== "completed")
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")).slice(0, 10);
   const recall = data.records.filter((r) => r.status === "no_show" || r.status === "cancelled").sort(byAppt).reverse();
   const item = (r, right) => {
     const c = customer(r.customerId);
@@ -133,18 +132,18 @@ function dashboardView() {
   <div class="stats">
     <div class="card stat"><b>${todayList.length}</b><span>Lịch hẹn hôm nay</span></div>
     <div class="card stat"><b>${week.length}</b><span>Lịch hẹn 7 ngày tới</span></div>
-    <div class="card stat"><b>${consultToday}</b><span>Lịch tư vấn hôm nay</span></div>
+    <div class="card stat"><b>${consults.length}</b><span>Lịch hẹn tư vấn đang theo dõi</span></div>
     <div class="card stat"><b>${unconfirmed.length}</b><span>Cần nhắc / xác nhận (2 ngày tới)</span></div>
     <div class="card stat"><b>${recall.length}</b><span>Cần chăm sóc lại</span></div>
     <div class="card stat"><b>${data.customers.length}</b><span>Khách hàng</span></div>
   </div>
   <div class="grid2">
     <div class="card"><h2>Lịch hẹn hôm nay</h2>${todayList.length ? `<div class="list">${todayList.map((r) => item(r, badge(r.status))).join("")}</div>` : `<div class="empty">Hôm nay chưa có lịch hẹn.</div>`}</div>
-    <div class="card"><h2>Lịch hẹn tư vấn (7 ngày tới)</h2>${consults.length ? `<div class="list">${consults.map((r) => {
+    <div class="card"><h2>Lịch hẹn tư vấn (ghi chú)</h2>${consults.length ? `<div class="list">${consults.map((r) => {
       const c = customer(r.customerId);
-      return `<div class="item"><div class="time">${esc(r.consultAt.slice(11, 16))}</div><div style="flex:1"><a href="#" data-cust="${esc(r.customerId)}"><b>${esc(c?.name || "—")}</b></a>
-        <div class="muted">${esc(doctor(r.doctorId)?.name || "")}${r.interpreter ? " · Phiên dịch: " + esc(r.interpreter) : ""}</div>${r.consultContent ? `<div>${esc(r.consultContent)}</div>` : ""}</div><div class="muted">${esc(fmtDate(r.consultAt))}</div></div>`;
-    }).join("")}</div>` : `<div class="empty">Không có lịch tư vấn sắp tới.</div>`}</div>
+      return `<div class="item"><div style="flex:1"><a href="#" data-cust="${esc(r.customerId)}"><b>${esc(c?.name || "—")}</b></a> <span class="muted">${esc(r.customerId)}</span>
+        <div>${esc(r.consultNote)}</div><div class="muted">${esc(doctor(r.doctorId)?.name || "")}${r.interpreter ? " · Phiên dịch: " + esc(r.interpreter) : ""}</div></div></div>`;
+    }).join("")}</div>` : `<div class="empty">Chưa có lịch hẹn tư vấn nào được ghi chú.</div>`}</div>
     <div class="card"><h2>Cần nhắc / xác nhận lịch</h2>${unconfirmed.length ? `<div class="list">${unconfirmed.sort(byAppt).map((r) => item(r, `<span class="muted">${esc(fmtDate(r.appointmentAt))}</span>`)).join("")}</div>` : `<div class="empty">Không có lịch cần nhắc.</div>`}</div>
     <div class="card"><h2>Khách cần chăm sóc lại (không đến / hủy)</h2>${recall.length ? `<div class="list">${recall.map((r) => item(r, badge(r.status))).join("")}</div>` : `<div class="empty">Không có khách cần chăm sóc lại.</div>`}</div>
   </div>`;
@@ -170,8 +169,7 @@ const exportBtn = () => `<button class="btn primary" data-export style="margin-l
 
 function appointmentsView() {
   const t = today(), f = filters;
-  // Mỗi bản ghi có thể có 2 lịch: lịch hẹn (khám) và lịch hẹn tư vấn; bộ lọc "Loại lịch" chọn lịch nào được tính.
-  const days = (r) => [f.apptType !== "consult" && r.appointmentAt, f.apptType !== "visit" && r.consultAt].filter(Boolean).map((s) => s.slice(0, 10));
+  const days = (r) => (r.appointmentAt ? [r.appointmentAt.slice(0, 10)] : []);
   const inRange = (ds) => {
     if (f.from || f.to) return true; // đã có khoảng ngày cụ thể → bỏ qua mốc nhanh (matchCommon lo phần này)
     if (f.apptRange === "today") return ds.some((d) => d === t);
@@ -190,7 +188,6 @@ function appointmentsView() {
   shown = { type: "records", ids: list.map((r) => r.id) };
   return `<div class="toolbar">${commonFilters()}</div>
   <div class="toolbar">
-    <select data-f="apptType">${options([["all", "Mọi loại lịch"], ["visit", "Lịch hẹn khám"], ["consult", "Lịch hẹn tư vấn"]], f.apptType)}</select>
     <select data-f="apptRange" ${f.from || f.to ? "disabled" : ""}>${options([["upcoming", "Từ hôm nay"], ["today", "Hôm nay"], ["week", "7 ngày tới"], ["past", "Đã qua"], ["all", "Tất cả"]], f.apptRange)}</select>
     <select data-f="apptDoctor">${options(data.doctors.map((d) => [d.id, d.name]), f.apptDoctor, "Tất cả bác sĩ")}</select>
     <select data-f="apptStatus">${options(Object.entries(STATUS).map(([k, v]) => [k, v[0]]), f.apptStatus, "Mọi trạng thái")}</select>
@@ -202,9 +199,9 @@ function careView() {
   const q = filters.careQ.toLowerCase();
   const list = data.records.filter((r) => {
     const c = customer(r.customerId);
-    if (!matchCommon(r, [r.appointmentAt, r.consultAt, r.createdAt].filter(Boolean).map((s) => s.slice(0, 10)))) return false;
+    if (!matchCommon(r, [r.appointmentAt, r.createdAt].filter(Boolean).map((s) => s.slice(0, 10)))) return false;
     if (!q) return true;
-    return [r.customerId, c?.name, c?.phone, r.interpreter, r.careContent, r.consultContent, r.note].some((v) => (v || "").toLowerCase().includes(q));
+    return [r.customerId, c?.name, c?.phone, r.interpreter, r.consultNote, r.careContent, r.consultContent, r.note].some((v) => (v || "").toLowerCase().includes(q));
   }).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   shown = { type: "records", ids: list.map((r) => r.id) };
   return `<div class="toolbar">${commonFilters()}</div>
@@ -342,11 +339,11 @@ function recordForm(r = {}, presetCustomer) {
   <form class="form" id="f">
     ${field("Khách hàng *", `<select name="customerId" required>${options(data.customers.map((c) => [c.id, `${c.name} · ${c.phone}`]), cid, "— Chọn khách hàng —")}</select>`, true)}
     ${field("Lịch hẹn (khám / điều trị)", `<input name="appointmentAt" type="datetime-local" value="${esc(r.appointmentAt)}">`)}
-    ${field("Lịch hẹn tư vấn", `<input name="consultAt" type="datetime-local" value="${esc(r.consultAt)}">`)}
     ${field("Trạng thái lịch hẹn", `<select name="status">${options(Object.entries(STATUS).map(([k, v]) => [k, v[0]]), r.status || "scheduled")}</select>`)}
     ${field("Bác sĩ", `<select name="doctorId">${options(data.doctors.map((d) => [d.id, d.name]), r.doctorId || customer(cid)?.doctorId, "—")}</select>`)}
     ${field("Dịch vụ", `<select name="serviceId">${options(data.services.map((s) => [s.id, s.name]), r.serviceId, "—")}</select>`)}
     ${field("Phiên dịch viên", `<input name="interpreter" maxlength="120" list="interpreters" placeholder="Chọn hoặc nhập tên (nếu cần phiên dịch)" value="${esc(r.interpreter)}"><datalist id="interpreters">${[...new Set(data.records.map((x) => x.interpreter).filter(Boolean))].map((n) => `<option value="${esc(n)}">`).join("")}</datalist>`, true)}
+    ${field("Lịch hẹn tư vấn (ghi chú)", `<textarea name="consultNote" placeholder="VD: Hẹn tư vấn niềng răng thứ Bảy buổi sáng, khách đi cùng người nhà…">${esc(r.consultNote)}</textarea>`, true)}
     ${field("Nội dung chăm sóc", `<textarea name="careContent" placeholder="VD: Gọi nhắc lịch, hỏi thăm sau điều trị…">${esc(r.careContent)}</textarea>`, true)}
     ${field("Nội dung tư vấn", `<textarea name="consultContent" placeholder="VD: Tư vấn phương án, chi phí, thời gian điều trị…">${esc(r.consultContent)}</textarea>`, true)}
     ${field("Ghi chú", `<textarea name="note">${esc(r.note)}</textarea>`, true)}
@@ -381,7 +378,7 @@ function customerDetail(id) {
   <div class="timeline">${recs.length ? recs.map((r) => `<div class="tl"><div class="tl-head"><b>${esc(fmtDT(r.appointmentAt))}</b>${badge(r.status)}
     <span class="muted">${esc(doctor(r.doctorId)?.name || "")}${service(r.serviceId) ? " · " + esc(service(r.serviceId).name) : ""}</span>${r.interpreter ? `<span class="badge gray">Phiên dịch: ${esc(r.interpreter)}</span>` : ""}
     <span style="margin-left:auto"><button class="btn sm" data-edit-rec="${r.id}">Sửa</button> ${canEdit() ? `<button class="btn sm danger" data-del-rec="${r.id}">Xóa</button>` : ""}</span></div>
-    <dl>${r.consultAt ? `<div><dt>Lịch hẹn tư vấn</dt><dd>${esc(fmtDT(r.consultAt))}</dd></div>` : ""}<div><dt>Nội dung chăm sóc</dt><dd>${nl(r.careContent)}</dd></div><div><dt>Nội dung tư vấn</dt><dd>${nl(r.consultContent)}</dd></div><div><dt>Ghi chú</dt><dd>${nl(r.note)}</dd></div></dl></div>`).join("") : `<div class="empty">Chưa có lịch sử chăm sóc.</div>`}</div>`, true);
+    <dl>${r.consultNote ? `<div><dt>Lịch hẹn tư vấn</dt><dd>${esc(r.consultNote)}</dd></div>` : ""}<div><dt>Nội dung chăm sóc</dt><dd>${nl(r.careContent)}</dd></div><div><dt>Nội dung tư vấn</dt><dd>${nl(r.consultContent)}</dd></div><div><dt>Ghi chú</dt><dd>${nl(r.note)}</dd></div></dl></div>`).join("") : `<div class="empty">Chưa có lịch sử chăm sóc.</div>`}</div>`, true);
 }
 
 /* ---------- Events ---------- */
